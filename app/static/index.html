@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Forest &amp; Carbon Q&amp;A</title>
+  <style>
+    :root { --green: #1f6f43; --bg: #f5f7f5; --card: #fff; --muted: #5b6b61; --warn: #9a5b00; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: #1d2a22; }
+    main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+    h1 { color: var(--green); margin: 0 0 4px; font-size: 1.6rem; }
+    p.lead { color: var(--muted); margin: 0 0 20px; }
+    form { display: flex; gap: 8px; }
+    input { flex: 1; padding: 12px; border: 1px solid #c8d3cb; border-radius: 8px; font-size: 1rem; }
+    button { padding: 12px 18px; border: 0; border-radius: 8px; background: var(--green); color: #fff; font-size: 1rem; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    .card { background: var(--card); border-radius: 10px; padding: 16px; margin-top: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .q { font-weight: 600; margin-bottom: 8px; }
+    .badge { display: inline-block; font-size: .8rem; padding: 2px 8px; border-radius: 999px; margin: 8px 0; }
+    .ok { background: #e3f2e8; color: var(--green); }
+    .bad { background: #fff1dc; color: var(--warn); }
+    details { margin-top: 8px; color: var(--muted); font-size: .9rem; }
+    .meta { font-size: .8rem; color: var(--muted); margin-top: 8px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Forest &amp; Carbon Q&amp;A</h1>
+  <p class="lead">Ask about forest cover and carbon trends. Every answer cites the dataset sources it used.</p>
+  <form id="ask">
+    <input id="question" placeholder="e.g. How did forest area change in Brazil from 1992 to 2020?" required minlength="3" maxlength="500">
+    <button id="send">Ask</button>
+  </form>
+  <div id="answers"></div>
+</main>
+<script>
+  const form = document.getElementById("ask");
+  const input = document.getElementById("question");
+  const button = document.getElementById("send");
+  const answers = document.getElementById("answers");
+
+  function el(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const question = input.value.trim();
+    button.disabled = true;
+    const card = el("div", "card");
+    card.append(el("div", "q", question), el("div", "", "Thinking…"));
+    answers.prepend(card);
+    try {
+      const res = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json();
+      card.lastChild.remove();
+      if (!res.ok) throw new Error(data.detail || "Request failed");
+      card.append(el("div", "", data.answer));
+      const v = data.validation;
+      card.append(el("span", "badge " + (v.grounded ? "ok" : "bad"),
+        (v.grounded ? "Verified: " : "Check this: ") + v.reason));
+      if (data.sources.length) {
+        const details = el("details");
+        details.append(el("summary", "", `Sources (${data.sources.length})`));
+        data.sources.forEach(s => details.append(el("div", "", `[source ${s.id}] ${s.text}`)));
+        card.append(details);
+      }
+      const u = data.usage;
+      card.append(el("div", "meta",
+        `${u.model} · ${u.latency_ms} ms · ${u.input_tokens}+${u.output_tokens} tokens · $${u.est_cost_usd}`));
+      input.value = "";
+    } catch (err) {
+      card.append(el("div", "badge bad", err.message));
+    } finally {
+      button.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

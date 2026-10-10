@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      # Tests use the offline FakeClient, so no API key is needed in CI.
+      - run: pytest -q
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t forest-carbon-chatbot .
+      - name: Smoke test the container
+        run: |
+          docker run -d -p 8000:8000 --name app forest-carbon-chatbot
+          for i in $(seq 1 20); do curl -fs http://localhost:8000/health && break || sleep 1; done
+          curl -fs -X POST http://localhost:8000/ask \
+            -H "Content-Type: application/json" \
+            -d '{"question": "Brazil forest area in 2000"}'
